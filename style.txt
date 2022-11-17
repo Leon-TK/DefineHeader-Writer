@@ -1,0 +1,17 @@
+var and funcs names in camelCase
+
+private fields m_*
+private func _*
+
+class' name first letter is capital
+interface class' name I*
+abstract class' name A*
+
+++i prefix incr/decr
+
+pointer - p*
+reference - r*
+shared sp*, sr*
+unique up*, ur*
+
+out* parameter's name if passed by ref or ptr with no const keyword

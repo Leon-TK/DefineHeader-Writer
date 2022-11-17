@@ -1,0 +1,9 @@
+style
+rename get functions to meaningfull
+check all parameters in functions for "out" semantic
+add "const" keywrods to all functions if you can
+add "const" keyword to all func parameters. For poiters and values if you can
+delete all default constructor if you dont need them. also delete copy assigment
+in all interface add virtual destructor
+in all derived calasses add final keyword
+in all derived classes add fnal keyword

@@ -1,0 +1,510 @@
+﻿// DefineHeaderWriter.cpp : This file contains the 'main' function. Program execution begins and ends there.
+//
+
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <algorithm>
+#include <vector>
+
+typedef char byte;
+typedef std::vector<char> binary;
+// args: 1. filepath with name
+std::string getArg(char** argv, const size_t index)
+{
+    std::string data;
+
+    size_t j = 0;
+    while (argv[index][j] != '\0')
+    {
+        data = data + argv[index][j];
+        j++;
+    }
+    return data;
+};
+
+const std::string getFilePath(char** argv)
+{
+    return getArg(argv, 1);
+}
+
+size_t getFileSize(std::ifstream& file)
+{
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    return size;
+}
+
+const std::string getFileName(const std::string filePath)
+{
+    std::string fileName = "";
+
+        //find first '\' from right
+
+        size_t index = filePath.length() - 1;
+        while (index != 0)
+        {
+            if (filePath[index] == '\\')
+            {
+                //save file name
+                fileName = filePath.substr(index + 1, filePath.length() - index);
+                index = 0;
+            }
+            else
+            {
+                index--;
+            }
+
+        }
+
+        return fileName;
+}
+
+const std::string processFileExtention(const std::string fileName)
+{
+    if (fileName.length() <= 0)
+    {
+        return "";
+    }
+
+    size_t index = fileName.length() - 1;
+    while (index != 0)
+    {
+        if (fileName[index] == '.')
+        {
+            //remove extention
+            return fileName.substr(0, index);
+        }
+        else
+        {
+            index--;
+        }
+    }
+
+    return fileName;
+}
+
+const std::string toUpperCase(std::string fileName)
+{
+    std::transform(fileName.begin(), fileName.end(), fileName.begin(), ::toupper);
+    return fileName;
+}
+
+const std::string formatFileName(const std::string fileName)
+{
+    std::string result;
+    result = processFileExtention(fileName);
+    result = toUpperCase(result);
+
+    //add _H
+    result += u8"_H";
+
+    return result;
+}
+const std::string getDefine(const std::string fileName)
+{
+    return u8"#ifndef " + fileName + u8"\n\r" + u8" #define " + fileName + u8"\n\r";
+}
+
+const std::string getEndif(const std::string fileName)
+{
+    return u8"#endif //" + fileName + u8"\n\r";
+}
+
+
+binary* loadFile(const std::string filePath, size_t& outSize)
+{
+
+    std::ifstream myfile(filePath, std::ios::binary);
+    const size_t size = getFileSize(myfile);
+    outSize = size;
+
+    //byte* buffer = new byte[size];
+
+    binary* buffer = new std::vector<char>();
+
+    if ((size > 0) && (myfile.is_open()))
+    {
+
+        buffer->resize(size);
+
+        try {
+            myfile.read(&buffer->at(0), size);
+        }
+
+        catch (std::exception& e)
+        {
+
+            std::cout << "exeption read file " << e.what();
+        }
+
+        if (!myfile.eof())
+        {
+            std::cout << "unreaded stream data appears " << myfile.gcount() << " of " << getFileSize(myfile);
+            myfile.clear();
+            return buffer;
+        }
+
+        return buffer;
+    }
+
+    buffer->resize(0);
+    return buffer;
+
+    
+}
+bool hasBOM(const binary* const buffer)
+{
+    // has BOM bytes?
+
+    if ((buffer->at(0) == static_cast<char>(0xEF)) && (buffer->at(1) == static_cast<char>(0xBB)) && (buffer->at(2) == static_cast<char>(0xBF)))
+    {
+        return true;
+    }
+
+    return false;
+}
+
+binary* getBOMBuffer(size_t& outSize)
+{
+
+    binary* buffer = new std::vector<char>{ static_cast<char>(0xEF) , static_cast<char>(0xBB), static_cast<char>(0xBF) };
+    outSize = buffer->size();
+
+    return buffer;
+}
+
+bool leftAppendBuffers(binary* dst, const size_t dSize, const binary* const src, size_t sSize)
+{
+
+    const size_t newSize = dSize + sSize;
+    binary* newBuffer = new std::vector<char>(newSize);
+    //newBuffer->resize(newSize);
+
+    //add source
+    for (size_t i = 0; i < sSize; i++)
+    {
+        newBuffer->at(i) = src->at(i);
+    }
+
+    //add dst
+    for (size_t i = sSize; i < newSize; i++)
+    {
+        newBuffer->at(i) = dst->at(i - sSize);
+    }
+
+    dst->swap(*newBuffer);
+
+    delete newBuffer;
+
+    return true;
+}
+
+bool rightAppendBuffers(binary* dst, const size_t dSize, const binary* const src, const size_t sSize)
+{
+    size_t newSize = dSize + sSize;
+    binary* newBuffer = new std::vector<char>(newSize);
+    //newBuffer->resize(newSize);
+    
+
+    // just fill up by dst
+    for (size_t i = 0; i < dSize; i++)
+    {
+        newBuffer->at(i) = dst->at(i);
+    }
+    //add src
+    for (size_t i = dSize; i < newSize; i++)
+    {
+        newBuffer->at(i) = src->at(i - dSize);
+    }
+
+    dst->swap(*newBuffer);
+
+    delete newBuffer;
+
+    return true;
+}
+
+bool middleAppendBuffers(binary* dst, const size_t dSize, const size_t offset, const binary* const src, const size_t sSize)
+{
+    size_t newSize = dSize + sSize;
+    binary* newBuffer = new std::vector<char>(newSize);
+
+    //size_t rightChopSize = newSize - offset;
+    //binary* rightChop = new std::vector<char>(rightChopSize);
+
+    //set left part os dst
+
+    for (size_t i = 0; i < offset; i++)
+    {
+        newBuffer->at(i) = dst->at(i);
+    }
+
+    //set source data after left part
+
+    for (size_t i = offset; i < sSize + offset; i++)
+    {
+        newBuffer->at(i) = src->at(i - offset);
+    }
+
+    //save right part of dst
+    /*
+    for (size_t i = 0; i < rightChopSize; i++)
+    {
+        rightChop->at(i) = dst->at(i + offset);
+    }
+    */
+
+
+    //set right part. must fit to newSize
+
+    for (size_t i = (sSize + offset); i < newSize; i++)
+    {
+
+        //new i -- i + dSize - offset
+        newBuffer->at(i) = dst->at(i - (sSize + offset) + offset); // + offset because it still exist in dst buffer
+
+    }
+
+
+    //delete rightChop;
+
+    dst->swap(*newBuffer);
+
+    delete newBuffer;
+
+    return true;
+}
+
+void insertBuffer(binary* dst, const size_t dSize, const size_t offset, const binary* const src, const size_t sSize)
+{
+    //can't fit
+    if (sSize > dSize)
+    {
+        return;
+    }
+
+    //out border
+    if (offset >= dSize)
+    {
+        return;
+    }
+
+    //can't fit
+    if (offset + sSize > dSize)
+    {
+        return;
+    }
+
+
+    const size_t newSize = dSize;
+    binary* newBuffer = new std::vector<char>(newSize);
+
+    //left
+    if (offset == 0)
+    {
+        //add src
+        for (size_t i = 0; i < sSize; i++)
+        {
+            newBuffer->at(i) = src->at(i);
+        }
+
+        
+        //add dst
+        for (size_t i = sSize; i < dSize; i++)
+        {
+            newBuffer->at(i)  = dst->at(i);
+        }
+
+        dst->swap(*newBuffer);
+        
+        delete newBuffer;
+    }
+
+    // middle or right
+    if (offset > 0)
+    {
+        //add dst
+
+        for (size_t i = 0; i < offset; i++)
+        {
+            newBuffer->at(i) = dst->at(i);
+        }
+
+        //if middle
+        if ((dSize - (offset + sSize)) > 0)
+        {
+            //add src
+
+            for (size_t i = offset; i < sSize; i++)
+            {
+                newBuffer->at(i) = src->at(i);
+            }
+
+            //add dst
+            for (size_t i = offset + sSize; i < dSize; i++)
+            {
+                newBuffer->at(i) = dst->at(i);
+            }
+
+            dst->swap(*newBuffer);
+
+            delete newBuffer;
+
+        }
+        //right
+        else
+        {
+            //add src
+            for (size_t i = offset; i < sSize; i++)
+            {
+                newBuffer->at(i) = src->at(i);
+            }
+
+            dst->swap(*newBuffer);
+
+            delete newBuffer;
+        }
+    }
+
+}
+
+//#define _TEST
+const size_t stringToBuffer(const std::string str, binary* buffer)
+{
+    binary* bufferd = new std::vector<char>(str.begin(), str.end());
+
+    size_t size = bufferd->size();
+
+    buffer->swap(*bufferd);
+
+    
+
+    delete bufferd;
+
+    return size;
+}
+
+const bool isDefineExist(binary* buffer, size_t outIndex)
+{
+
+    return false;
+}
+
+
+// 1 arg - file path with name
+int main(int argc, char ** argv)
+{
+    
+    if (argc != 2)
+    {
+        std::cout << "arg error. must be 2 args. filepath";
+    }
+
+#ifdef  _TEST
+    const size_t fileSize = 100;
+    std::string filePath = "j:"; //getFilePath(argv);
+    filePath += "\\";
+    filePath += "programm files";
+    filePath += "\\";
+    filePath += "server.exe";
+#else
+    std::string filePath = getFilePath(argv);
+#endif //  _TEST
+
+
+    if (filePath.length() <= 0)
+    {
+        return 1;
+    }
+
+    const std::string fileName = getFileName(filePath);
+    std::string modedFileName = formatFileName(fileName);
+
+    if (fileName.length() <= 0)
+    {
+        return 1;
+    }
+
+    binary* defineBuffer = new std::vector<char>();
+    const size_t defineSize = stringToBuffer(getDefine(modedFileName), defineBuffer);
+
+    binary* endifBuffer = new std::vector<char>();
+    const size_t endifSize = stringToBuffer(getEndif(modedFileName), endifBuffer);
+
+#ifdef _TEST
+    byte* fileBuffer = new byte[fileSize]; //getFileBuffer(filePath, fileSize);
+    for (size_t i = 0; i < fileSize; i++)
+    {
+        fileBuffer[i] = u8'a';
+        if (i == fileSize - 1)
+        {
+            fileBuffer[i] = u8'\n';
+        }
+    }
+
+    byte* bomb = new byte;
+    size_t siase = getBOMBuffer(bomb);
+    insertBuffer(fileBuffer, fileSize, 0, bomb, siase);
+
+#else
+    size_t fileSize = 0;
+    binary* fileBuffer = loadFile(filePath, fileSize);
+#endif // _TEST
+
+
+    const size_t outputSize = fileSize + defineSize + endifSize;
+    binary* outputBuffer = new std::vector<char>(outputSize);
+
+
+    //filling up outoutBuffer
+    const bool hasBom = hasBOM(fileBuffer);
+    size_t bomSize = 0;
+
+    if (hasBom)
+    {
+        binary* bombuffer = getBOMBuffer(bomSize);
+        
+        //push define to middle 
+        middleAppendBuffers(fileBuffer, fileSize, bomSize, defineBuffer, defineSize);
+    }
+    else
+    {
+        //push define
+        leftAppendBuffers(fileBuffer, fileSize, defineBuffer, defineSize);
+    }
+
+    //push fileBuffer
+    //middleAppendBuffers(outputBuffer, outputSize, bomSize + defineSize, fileBuffer, fileSize);
+
+    //insert endif
+    rightAppendBuffers(fileBuffer, fileBuffer->size(), endifBuffer, endifSize);
+
+    std::ofstream file("file.txt");
+    //file << outputBuffer;
+
+    if (file.is_open())
+    {
+        file.write(&fileBuffer->at(0), fileBuffer->size());
+        std::cout << "Complete";
+    }
+    else
+    {
+        std::cout << "File is closed";
+    }
+
+    
+}
+
+// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
+// Debug program: F5 or Debug > Start Debugging menu
+
+// Tips for Getting Started: 
+//   1. Use the Solution Explorer window to add/manage files
+//   2. Use the Team Explorer window to connect to source control
+//   3. Use the Output window to see build output and other messages
+//   4. Use the Error List window to view errors
+//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
+//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
